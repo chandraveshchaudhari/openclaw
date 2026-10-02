@@ -1,0 +1,83 @@
+{
+  "agents": {
+    "entries": {
+      "main": {
+        "name": "main",
+        "workspace": "/tmp/openclaw-pr-evidence-dXTT/.openclaw/workspace",
+        "agentDir": "/tmp/openclaw-pr-evidence-dXTT/.openclaw/agents/main/agent",
+        "identity": {
+          "name": "main"
+        }
+      }
+    },
+    "defaults": {
+      "workspace": "/tmp/openclaw-pr-evidence-dXTT/.openclaw/workspace",
+      "skipBootstrap": true,
+      "models": {
+        "openrouter/auto": {
+          "alias": "OpenRouter"
+        }
+      },
+      "model": {
+        "primary": "openrouter/auto"
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "anthropic": {
+        "config": {
+          "sessionCatalog": {
+            "enabled": false
+          }
+        }
+      },
+      "codex": {
+        "config": {
+          "sessionCatalog": {
+            "enabled": false
+          }
+        }
+      },
+      "openrouter": {
+        "enabled": true
+      }
+    }
+  },
+  "meta": {
+    "migrations": {
+      "modelPolicyAllowlist": true,
+      "utilityModelSeparation": true
+    },
+    "lastTouchedVersion": "2026.9.7"
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "****REDACTED****"
+    },
+    "port": 18789,
+    "bind": "loopback",
+    "tailscale": {
+      "mode": "off"
+    }
+  },
+  "tools": {
+    "profile": "full"
+  },
+  "auth": {
+    "profiles": {
+      "openrouter:default": {
+        "provider": "openrouter",
+        "mode": "api_key"
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-10-02T15:12:10.030Z",
+    "lastRunVersion": "2026.9.7",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  }
+}
