@@ -14,6 +14,7 @@ import { fingerprintResolvedProviderAuth } from "../agents/execution-auth-bindin
 import { resolveModelRuntimePolicy } from "../agents/model-runtime-policy.js";
 import { buildAllowedModelSet } from "../agents/model-selection.js";
 import { ensureOnboardingAgent } from "../commands/onboard-agent.js";
+import { detectInferenceBackends } from "../commands/onboard-inference.js";
 import { hasResolvedRosterBeforeMigrations } from "../config/agent-roster-provenance.js";
 import { clearConfigCache, readConfigFileSnapshot } from "../config/config.js";
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
@@ -501,6 +502,53 @@ describe("setup activation credentials and configuration", () => {
     expect(resolveAgentModelPrimaryValue(persisted.sourceConfig.agents?.defaults?.model)).toBe(
       `openrouter/auto@${setup.readProfile()?.[0]}`,
     );
+  });
+
+  it("re-verifies a saved OpenRouter auto installation through current-model discovery", async () => {
+    const openrouterCredential = {
+      type: "api_key",
+      provider: "openrouter",
+      key: "sk-or-v1-existing-fixture-key",
+    } as const;
+    const setup = await fixture({
+      primaryModel: "openrouter/auto@openrouter:existing",
+      provider: {
+        id: "openrouter",
+        label: "OpenRouter",
+        modelRef: "openrouter/auto",
+        modelId: "openrouter/auto",
+        api: "openai-completions",
+        baseUrl: "https://openrouter.ai/api/v1",
+        credential: openrouterCredential,
+        profileId: "openrouter:default",
+      },
+    });
+    await persistProviderAuthProfilesAfterLogin({
+      config: setup.config,
+      agentDir: setup.agentDir,
+      profiles: [{ profileId: "openrouter:existing", credential: openrouterCredential }],
+    });
+
+    const currentModel = (
+      await detectInferenceBackends({
+        config: setup.config,
+        env: {},
+        platform: "linux",
+        deps: {
+          probeLocalCommand: async (command) => ({ command, found: false }),
+          readCodexCliCredentials: () => null,
+        },
+      })
+    ).find((candidate) => candidate.kind === "existing-model");
+    expect(currentModel).toMatchObject({ modelRef: "openrouter/auto" });
+
+    const result = await setup.activate(currentModel!.kind, undefined, {
+      modelRef: currentModel!.modelRef,
+    });
+
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, modelRef: "openrouter/auto" });
+    expect(setup.run).toHaveBeenCalledOnce();
+    expect(setup.run.mock.calls[0]?.[0].authProfileId).toBe("openrouter:existing");
   });
 
   it("records persisted root hashes when setup retains an unrelated include", async () => {

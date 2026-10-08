@@ -279,6 +279,22 @@ describe("detectInferenceBackends", () => {
     ]);
   });
 
+  it("uses the canonical OpenRouter ref for the configured current model", async () => {
+    const candidates = await detectInferenceBackends({
+      config: {
+        agents: {
+          defaults: { model: "openrouter/auto" },
+          entries: { main: {} },
+        },
+      },
+      env: {},
+      platform: "linux",
+      deps: { probeLocalCommand: probeDeps({}), readCodexCliCredentials: () => null },
+    });
+
+    expect(candidates).toMatchObject([{ kind: "existing-model", modelRef: "openrouter/auto" }]);
+  });
+
   it("keeps missing Gemini legacy credentials and native login states unverified", async () => {
     const candidates = await detectInferenceBackends({
       env: {},

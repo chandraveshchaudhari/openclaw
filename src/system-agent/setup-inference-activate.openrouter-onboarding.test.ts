@@ -136,3 +136,25 @@ it("resolves a bare alias primary to the canonical model label", async () => {
   );
   expect(route?.modelLabel).toBe("openrouter/auto");
 });
+
+it("resolves a provider-qualified alias before forming the route label", async () => {
+  const config = {
+    agents: {
+      defaults: {
+        model: { primary: "openai/Fast" },
+        models: { "openai/gpt-5.4-mini": { alias: "Fast" } },
+      },
+    },
+    models: { providers: { openai: { apiKey: "synthetic-openai-key" } } },
+  } as unknown as OpenClawConfig;
+  await fs.writeFile(configPath, JSON.stringify(config));
+  const snapshot = await readSnapshot();
+  expect(snapshot.valid, JSON.stringify(snapshot.issues)).toBe(true);
+  const route = await resolveSystemAgentConfiguredRouteFromConfig(
+    snapshot.runtimeConfig,
+    undefined,
+    {},
+    snapshot,
+  );
+  expect(route?.modelLabel).toBe("openai/gpt-5.4-mini");
+});

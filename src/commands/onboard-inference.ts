@@ -14,6 +14,7 @@ import { tryResolveLegacyCompatibilityAgentId } from "../config/legacy.default-a
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveOsHomeDir } from "../infra/home-dir.js";
+import { modelKey } from "../shared/model-key.js";
 import { probeLocalCommand, type LocalCommandProbe } from "../system-agent/probes.js";
 import {
   CLAUDE_CLI_DEFAULT_MODEL_REF,
@@ -146,7 +147,9 @@ export async function detectInferenceBackends(
       cfg: options.config ?? {},
       ...(defaultAgentId ? { agentId: defaultAgentId } : {}),
     });
-    const modelRef = `${resolved.provider}/${resolved.model}`;
+    // Keep discovery aligned with configured-route activation for model ids
+    // that already carry their provider namespace (OpenRouter's `openrouter/auto`).
+    const modelRef = modelKey(resolved.provider, resolved.model);
     candidates.push({
       kind: "existing-model",
       // Approval and activation bind to the executable target, not a mutable
