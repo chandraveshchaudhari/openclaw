@@ -863,6 +863,49 @@ describe("setup activation credentials and configuration", () => {
     expect(saved.agents?.entries?.other).toEqual(configured.agents?.entries?.other);
   });
 
+  it("rotates a saved sign-in onto the agent's current model without an explicit modelRef", async () => {
+    // Issue #167381: re-running a provider sign-in saves a replacement credential
+    // whose `setup.modelRef` is the method's starter model. Activating it must not
+    // silently switch the agent to that starter model; without an explicit
+    // modelRef, activation should verify and keep the agent's current model when
+    // it belongs to the same provider.
+    const setup = await fixture({ authMethod: "api_key", primaryModel: "stable/global-model" });
+    const configured = structuredClone(setup.config);
+    assert(configured.agents?.defaults);
+    configured.agents.ownership = "explicit";
+    configured.agents.defaults.systemAgent = { agentId: "main" };
+    configured.agents.entries = {
+      main: { model: `${modelRef}@openai:removed` },
+    };
+    await fs.writeFile(setup.configPath, JSON.stringify(configured));
+    clearConfigCache();
+    await upsertAuthProfileWithLock({
+      agentDir: setup.agentDir,
+      profileId: "openai:replacement",
+      credential: {
+        ...credential,
+        setup: {
+          replacement: true,
+          modelRef: "openai/provider-default",
+          configJson: "{}",
+        },
+      },
+    });
+
+    const result = await setup.activate("saved-auth:openai%3Areplacement", true, {
+      agentId: "main",
+      modelRef: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: true, modelRef });
+    expect(setup.run.mock.calls[0]?.[0]).toMatchObject({
+      authProfileId: "openai:replacement",
+      model: "gpt-5.4-mini",
+    });
+    const saved = (await readConfigFileSnapshot()).sourceConfig;
+    expect(saved.agents?.entries?.main?.model).toBe(`${modelRef}@openai:replacement`);
+  });
+
   it("rejects a concurrent provider change without overwriting it or removing the sign-in", async () => {
     const setup = await fixture();
     const edited = structuredClone(setup.config);
