@@ -21,6 +21,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { modelKey } from "../agents/model-selection.js";
+import { detectInferenceBackends } from "../commands/onboard-inference.js";
 import { readConfigFileSnapshot } from "../config/config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
@@ -66,13 +67,6 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllEnvs();
   await temp?.restore();
-});
-
-it("mirrors the slash-ambiguous OpenRouter compatibility default", () => {
-  // Premise guard: the shipped default is the compat form the config normalizer
-  // keeps bare, which is what the staged candidate carries. The real constant
-  // lives in the OpenRouter onboard suite; this mirror documents the shape.
-  expect(OPENROUTER_DEFAULT_MODEL_REF).toBe("openrouter/auto");
 });
 
 it("resolves the OpenRouter default route label to the staged candidate ref", async () => {
@@ -157,4 +151,45 @@ it("resolves a provider-qualified alias before forming the route label", async (
     snapshot,
   );
   expect(route?.modelLabel).toBe("openai/gpt-5.4-mini");
+});
+
+it("discovers the same Fusion identity that activation resolves", async () => {
+  // End-to-end guard for the previously reported Fusion discovery regression:
+  // the "Current model" candidate advertised by setup discovery must equal the
+  // configured-route label that activation compares against. Before the fix,
+  // discovery advertised `openrouter/fusion` while activation retained
+  // `openrouter/openrouter/fusion`, so selecting Current model failed with
+  // "The configured default model changed from openrouter/fusion to
+  // openrouter/openrouter/fusion".
+  const config = {
+    agents: {
+      defaults: { model: { primary: "openrouter/openrouter/fusion" } },
+      entries: { main: {} },
+    },
+    models: { providers: { openrouter: { apiKey: "synthetic-openrouter-key" } } },
+  } as unknown as OpenClawConfig;
+  await fs.writeFile(configPath, JSON.stringify(config));
+  const snapshot = await readSnapshot();
+  expect(snapshot.valid, JSON.stringify(snapshot.issues)).toBe(true);
+
+  const candidates = await detectInferenceBackends({
+    config: snapshot.runtimeConfig,
+    agentId: "main",
+    env: {},
+    platform: "linux",
+    deps: {
+      probeLocalCommand: async (command) => ({ found: false, command }),
+      readCodexCliCredentials: () => null,
+    },
+  });
+  const discovered = candidates.find((candidate) => candidate.kind === "existing-model");
+  expect(discovered?.modelRef).toBe("openrouter/openrouter/fusion");
+
+  const route = await resolveSystemAgentConfiguredRouteFromConfig(
+    snapshot.runtimeConfig,
+    undefined,
+    {},
+    snapshot,
+  );
+  expect(route?.modelLabel).toBe(discovered?.modelRef);
 });

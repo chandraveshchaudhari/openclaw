@@ -16,7 +16,6 @@ import { createRuntimeConfigReader } from "../config/runtime-snapshot.js";
 import type { ConfigFileSnapshot, OpenClawConfig } from "../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.types.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import { modelKey } from "../shared/model-key.js";
 import { SYSTEM_AGENT_ID } from "./agent-id.js";
 
 export type SystemAgentConfiguredRoute = {
@@ -187,32 +186,14 @@ export async function resolveSystemAgentConfiguredRouteFromConfig(
   // authored spelling. Literal catalog namespaces still retain their spelling.
   // Drop the auth-profile suffix the selection already separated so callers can
   // append `authProfileId` themselves.
-  const configuredRef = configuredSelection.modelRef?.trim();
-  const configuredModelRef =
-    configuredRef && configuredRef.includes("/")
-      ? selection.profileId && configuredRef.endsWith(`@${selection.profileId}`)
-        ? configuredRef.slice(0, configuredRef.length - selection.profileId.length - 1)
-        : configuredRef
-      : undefined;
-  const configuredRefResolution = configuredModelRef
-    ? modelSelection.resolveModelRefFromString({
-        cfg: runConfig,
-        agentId: modelOwnerAgentId,
-        raw: configuredModelRef,
-        defaultProvider: selection.provider,
-        aliasIndex: modelSelection.buildModelAliasIndex({
-          cfg: runConfig,
-          agentId: modelOwnerAgentId,
-          defaultProvider: selection.provider,
-          ...(deps.pluginMetadataPlugins ? { manifestPlugins: deps.pluginMetadataPlugins } : {}),
-        }),
-        ...(deps.pluginMetadataPlugins ? { manifestPlugins: deps.pluginMetadataPlugins } : {}),
-      })
-    : undefined;
-  const modelLabel = modelKey(
-    selection.provider,
-    configuredModelRef && !configuredRefResolution?.alias ? configuredModelRef : selection.modelId,
-  );
+  const modelLabel = modelSelection.resolveConfiguredRouteModelLabel({
+    cfg: runConfig,
+    agentId: modelOwnerAgentId,
+    configuredRef: configuredSelection.modelRef,
+    resolved: { provider: selection.provider, model: selection.modelId },
+    ...(selection.profileId ? { profileId: selection.profileId } : {}),
+    ...(deps.pluginMetadataPlugins ? { manifestPlugins: deps.pluginMetadataPlugins } : {}),
+  });
   const base = {
     ...(configuredSelection.modelTarget ? { modelTarget: configuredSelection.modelTarget } : {}),
     sourceConfig: runConfig,

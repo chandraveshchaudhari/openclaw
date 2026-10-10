@@ -295,6 +295,29 @@ describe("detectInferenceBackends", () => {
     expect(candidates).toMatchObject([{ kind: "existing-model", modelRef: "openrouter/auto" }]);
   });
 
+  it("preserves a literal OpenRouter catalog namespace for the configured current model", async () => {
+    // `openrouter/openrouter/fusion` is a documented OpenRouter selection whose
+    // upstream model id is `openrouter/fusion`. Discovery must advertise the
+    // authored literal namespace so it matches configured-route activation;
+    // otherwise selecting Current model fails with "The configured default model
+    // changed from openrouter/fusion to openrouter/openrouter/fusion".
+    const candidates = await detectInferenceBackends({
+      config: {
+        agents: {
+          defaults: { model: "openrouter/openrouter/fusion" },
+          entries: { main: {} },
+        },
+      },
+      env: {},
+      platform: "linux",
+      deps: { probeLocalCommand: probeDeps({}), readCodexCliCredentials: () => null },
+    });
+
+    expect(candidates).toMatchObject([
+      { kind: "existing-model", modelRef: "openrouter/openrouter/fusion" },
+    ]);
+  });
+
   it("keeps missing Gemini legacy credentials and native login states unverified", async () => {
     const candidates = await detectInferenceBackends({
       env: {},
