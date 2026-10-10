@@ -5,6 +5,10 @@ import { resolveAgentEffectiveModelPrimary } from "../agents/agent-scope.js";
 import { loadAuthProfileStoreWithoutExternalProfiles } from "../agents/auth-profiles/store-runtime.js";
 import { splitTrailingAuthProfile } from "../agents/model-ref-profile.js";
 import { resolveModelRuntimePolicy } from "../agents/model-runtime-policy.js";
+import {
+  resolveDefaultModelForAgent,
+  resolveConfiguredRouteModelLabel,
+} from "../agents/model-selection.js";
 import { resolveProviderIdForAuth } from "../agents/provider-auth-aliases.js";
 import { resolveConfiguredSetupModelForAgent } from "../agents/utility-model.js";
 import { applyMergePatch } from "../config/merge-patch.js";
@@ -65,10 +69,8 @@ function sameProviderRef(a: string | undefined, b: string | undefined): boolean 
   if (!a || !b) {
     return false;
   }
-  return (
-    normalizeProviderId(parseInferenceRef(a).provider) ===
-    normalizeProviderId(parseInferenceRef(b).provider)
-  );
+  const providerOf = (ref: string) => normalizeProviderId(parseInferenceRef(ref).provider);
+  return providerOf(a) === providerOf(b);
 }
 
 export function selectSetupCredential(
@@ -290,6 +292,29 @@ async function stagePreparedCandidate(
   };
 }
 
+/**
+ * The agent's current configured model as the executable identity that
+ * configured-route activation labels (aliases resolved, literal catalog
+ * namespaces kept, auth-profile suffix dropped).
+ */
+function resolveConfiguredRouteModelRef(ctx: StageContext): string | undefined {
+  const selection = resolveConfiguredSetupModelForAgent({
+    cfg: ctx.cfg,
+    agentId: ctx.routeAgentId,
+  });
+  if (!selection) {
+    return undefined;
+  }
+  const { profile } = splitTrailingAuthProfile(selection.modelRef);
+  return resolveConfiguredRouteModelLabel({
+    cfg: ctx.cfg,
+    agentId: ctx.routeAgentId,
+    configuredRef: selection.modelRef,
+    resolved: resolveDefaultModelForAgent({ cfg: ctx.cfg, agentId: ctx.routeAgentId }),
+    ...(profile ? { profileId: profile } : {}),
+  });
+}
+
 export async function stageSavedAuthCandidate(
   ctx: StageContext,
   profileId: string,
@@ -337,17 +362,10 @@ export async function stageSavedAuthCandidate(
     // Prefer an explicit modelRef, then the agent's current configured model when
     // it belongs to this provider, then the saved/starter model. This lets a
     // re-login rotate the credential without silently changing the agent's model
-    // (the saved sign-in's starter model is often a different default). The
-    // configured ref's own auth-profile suffix is dropped so activation binds the
-    // replacement profile instead of the removed one.
+    // (the saved sign-in's starter model is often a different default).
     const savedModelRef = saved?.modelRef ?? loaded?.method.starterModel;
     const explicitModelRef = ctx.params.modelRef?.trim();
-    const configuredModelRef = explicitModelRef
-      ? undefined
-      : splitTrailingAuthProfile(
-          resolveConfiguredSetupModelForAgent({ cfg: ctx.cfg, agentId: ctx.routeAgentId })
-            ?.modelRef ?? "",
-        ).model;
+    const configuredModelRef = explicitModelRef ? undefined : resolveConfiguredRouteModelRef(ctx);
     const modelRef =
       explicitModelRef ??
       (configuredModelRef && sameProviderRef(configuredModelRef, savedModelRef)

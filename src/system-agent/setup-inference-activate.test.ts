@@ -906,6 +906,42 @@ describe("setup activation credentials and configuration", () => {
     expect(saved.agents?.entries?.main?.model).toBe(`${modelRef}@openai:replacement`);
   });
 
+  it("resolves a configured alias before staging a saved sign-in without an explicit modelRef", async () => {
+    // A qualified alias primary must stage the concrete model the configured
+    // route resolves, not the authored spelling the identity guard would reject.
+    const setup = await fixture({ authMethod: "api_key" });
+    const configured = structuredClone(setup.config);
+    assert(configured.agents?.defaults);
+    configured.agents.ownership = "explicit";
+    configured.agents.defaults.systemAgent = { agentId: "main" };
+    configured.agents.defaults.models = { [modelRef]: { alias: "Fast" } };
+    configured.agents.entries = { main: { model: `openai/Fast@openai:removed` } };
+    await fs.writeFile(setup.configPath, JSON.stringify(configured));
+    clearConfigCache();
+    await upsertAuthProfileWithLock({
+      agentDir: setup.agentDir,
+      profileId: "openai:replacement",
+      credential: {
+        ...credential,
+        setup: { replacement: true, modelRef: "openai/provider-default", configJson: "{}" },
+      },
+    });
+
+    const result = await setup.activate("saved-auth:openai%3Areplacement", true, {
+      agentId: "main",
+      modelRef: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: true, modelRef });
+    expect(setup.run.mock.calls[0]?.[0]).toMatchObject({
+      authProfileId: "openai:replacement",
+      model: "gpt-5.4-mini",
+    });
+    // The config write normalizes the alias to the concrete model too.
+    const saved = (await readConfigFileSnapshot()).sourceConfig;
+    expect(saved.agents?.entries?.main?.model).toBe(`${modelRef}@openai:replacement`);
+  });
+
   it("rejects a concurrent provider change without overwriting it or removing the sign-in", async () => {
     const setup = await fixture();
     const edited = structuredClone(setup.config);
